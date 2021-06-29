@@ -1,4 +1,4 @@
-# Place-Recognition-Pytorch
+# Place-Recognition-Pytorch-Lightning
 
 
 ## Train on MSLS
