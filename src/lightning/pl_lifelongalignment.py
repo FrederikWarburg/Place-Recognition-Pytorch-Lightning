@@ -117,9 +117,21 @@ class PL_LifeLongAlignment(pl.LightningModule):
         for i, k in enumerate([1, 5, 10, 20]):
             self.log("test_recall/recall@{}".format(k), recalls[i])
 
-    def get_indices_tuple(self, y_hat, y):
+    def get_indices_tuple(self, embeddings, labels):
 
-        indices_tuple = self.miner(embeddings = y_hat, labels = y)
+        if self.args.split_query_database:
+            b, _ = embeddings.shape
+            
+            ref_emb = embeddings[b//2:]
+            embeddings = embeddings[:b//2]
+            
+            ref_labels = labels[b//2:]
+            labels = labels[:b//2]
+        else:
+            ref_emb = None
+            ref_labels = None
+
+        indices_tuple = self.miner(embeddings, labels, ref_emb, ref_labels)
 
         self.log("tuple_stats/an_dist", self.miner.neg_pair_dist)
         self.log("tuple_stats/ap_dist", self.miner.pos_pair_dist)
@@ -155,13 +167,20 @@ class PL_LifeLongAlignment(pl.LightningModule):
 
         tensorboard  = self.logger.experiment
 
+        if self.args.split_query_database:
+            b, _, _, _, = x.shape
+            x_ref = x[b//2:]
+            x = x[:b//2]
+        else:
+            x_ref = x
+
         # display triplets on tensorboard
         len_ = len(indices_tuple[0])
         index = np.random.choice(len_, min(5,len_), replace=False)
         for i, idx in enumerate(index):
 
             a = self.inv_normalize(x[indices_tuple[0][idx]])
-            p = self.inv_normalize(x[indices_tuple[1][idx]])
-            n = self.inv_normalize(x[indices_tuple[2][idx]])
+            p = self.inv_normalize(x_ref[indices_tuple[1][idx]])
+            n = self.inv_normalize(x_ref[indices_tuple[2][idx]])
 
             tensorboard.add_images("triplets/{}".format(i), torch.stack([a,p,n]), self.current_epoch)

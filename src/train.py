@@ -111,6 +111,8 @@ def parse_args():
                         metavar='miner', help='which miner to use (default: all)')
     parser.add_argument('--distance', dest='distance', type = str, default='euclidean',
                         help='distance metric during training')
+    parser.add_argument('--split_query_database', dest='split_query_database', action='store_false',
+                        help='distingush between whether images comes from database or query when training')
     
     return parser.parse_args()
 

@@ -33,7 +33,7 @@ class BaseDataset(data.Dataset):
 
         # load query / database data
         #TODO: rename on disk
-        qData = pd.read_csv(join(root_dir, mode, 'query', 'data.csv'), index_col=0)
+        qData = pd.read_csv(join(root_dir, self.mode, 'query', 'data.csv'), index_col=0)
         
         # remove offset
         qData['easting'] = qData['X1'] - 690000
@@ -42,11 +42,11 @@ class BaseDataset(data.Dataset):
         qData['key'] = qData['Image filename']
 
         #TODO: include filenames
-        dbData = pd.read_csv(join(root_dir, mode, 'database', 'data.csv'), index_col=0)
+        dbData = pd.read_csv(join(root_dir, self.mode, 'database', 'data.csv'), index_col=0)
         
         # append image keys with full path
-        self.qImages = np.asarray([join(root_dir, mode, 'query', 'images', key) for key in qData['key'].values])
-        self.dbImages = np.asarray([join(root_dir, mode, 'database', 'images', key) for key in dbData['key'].values])
+        self.qImages = np.asarray([join(root_dir, self.mode, 'query', 'images', key) for key in qData['key'].values])
+        self.dbImages = np.asarray([join(root_dir, self.mode, 'database', 'images', key) for key in dbData['key'].values])
 
         # utm coordinates
         self.utmQ = qData[['easting', 'northing']].values.reshape(-1,2)
@@ -57,7 +57,7 @@ class BaseDataset(data.Dataset):
         neigh.fit(self.utmDb)
         _, pI = neigh.radius_neighbors(self.utmQ, self.posDistThr)
 
-        if mode == 'train':
+        if self.mode == 'train':
             _, nI = neigh.radius_neighbors(self.utmQ, self.negDistThr)
 
         for qidx in range(len(qData)):

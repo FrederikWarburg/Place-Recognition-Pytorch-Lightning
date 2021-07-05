@@ -52,7 +52,7 @@ class PlaceRecognitionDataModule(pl.LightningDataModule):
                         }
 
         val_input = {'name' : self.training_dataset, 
-                        'mode' : 'train',
+                        'mode' : 'val',
                         'imsize' : self.image_size,
                         'transform': transform,
                         'posDistThr' : self.negDistThr,
@@ -61,7 +61,7 @@ class PlaceRecognitionDataModule(pl.LightningDataModule):
                         }
 
         test_input = {'name' : self.training_dataset, 
-                        'mode' : 'train',
+                        'mode' : 'test',
                         'imsize' : self.image_size,
                         'transform': transform,
                         'posDistThr' : self.negDistThr,
