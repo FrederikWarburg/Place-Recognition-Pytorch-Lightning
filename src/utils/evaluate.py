@@ -226,7 +226,7 @@ class MeanAveragePrecision(Metric):
         self.utmQ.append(utmQ)
         self.utmDb.append(utmDb)
 
-    def compute(self):
+    def rank(self):
 
         q_embed = self.q_embed.view(-1, self.q_embed.shape[-1]).cpu().numpy()
         db_embed = self.db_embed.view(-1, self.db_embed.shape[-1]).cpu().numpy()
@@ -256,7 +256,7 @@ class MeanAveragePrecision(Metric):
 
         if len(utmQ) == 0 or len(utmDb) == 0: 
             print("\n==>{} queries and {} db items found\n".format(len(utmQ), len(utmDb)))
-            return np.zeros(3), np.zeros(4)
+            return None, None
 
         neigh = NearestNeighbors(algorithm = 'brute')
         neigh.fit(utmDb)
@@ -265,6 +265,14 @@ class MeanAveragePrecision(Metric):
         dist = q_embed @ db_embed.T
         ranks = np.argsort(-dist, axis=1)
 
+        return ranks, pidxs
+
+    def compute(self):
+
+        ranks, pidxs = self.rank()
+        if ranks is None:
+            return np.zeros(3), np.zeros(4)
+        
         mAPs = [mapk(ranks, pidxs, k = k) for k in [5, 10, 20]]
         recalls = recall(ranks, pidxs, ks= [1, 5, 10, 20])
 

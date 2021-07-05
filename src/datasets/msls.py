@@ -23,104 +23,101 @@ default_cities_debug = {
 
 class BaseDataset(data.Dataset):
  
-
     def __init__(self, name, mode='train', imsize=None, transform=None, loader=default_loader, posDistThr=10, negDistThr=25, root_dir = 'data', cities = ''):
 
-        if name.startswith('msls'):
-            
-            if cities == 'debug':
-                self.cities = default_cities_debug[mode]
-            elif cities in default_cities:
-                self.cities = default_cities[cities]
-            elif cities == '':
-                self.cities = default_cities[mode]
-            else:
-                self.cities = cities.split(',')
-            
-            self.dbImages = []
-            self.qImages = []
-            self.qidxs = [] 
-            self.pidxs = []  
-            self.clusters = [] 
+        if cities == 'debug':
+            self.cities = default_cities_debug[mode]
+        elif cities in default_cities:
+            self.cities = default_cities[cities]
+        elif cities == '':
+            self.cities = default_cities[mode]
+        else:
+            self.cities = cities.split(',')
+        
+        self.dbImages = []
+        self.qImages = []
+        self.qidxs = [] 
+        self.pidxs = []  
+        self.clusters = [] 
 
-            # hyper-parameters
-            self.posDistThr = posDistThr
-            self.negDistThr = negDistThr
-            self.imsize = imsize
+        # hyper-parameters
+        self.posDistThr = posDistThr
+        self.negDistThr = negDistThr
+        self.imsize = imsize
 
-            self.transform = transform
-            self.loader = loader
+        self.transform = transform
+        self.loader = loader
 
-            # flags
-            self.name = name
-            self.exclude_panos = True
-            self.mode = mode
+        # flags
+        self.name = name
+        self.exclude_panos = True
+        self.mode = mode
 
-            # other
-            self.transform = transform
+        # other
+        self.transform = transform
 
-            # load data
-            for city in self.cities:
-                print("=====> {}".format(city))
+        # load data
+        for city in self.cities:
+            print("=====> {}".format(city))
 
-                subdir = 'test' if city in default_cities['test'] else 'train_val'
+            subdir = 'test' if city in default_cities['test'] else 'train_val'
 
-                # get len of images from cities so far for indexing
-                _lenQ = len(self.qImages)
-                _lenDb = len(self.dbImages)
+            # get len of images from cities so far for indexing
+            _lenQ = len(self.qImages)
+            _lenDb = len(self.dbImages)
 
-                # when GPS / UTM is available
-                if self.mode in ['train', 'val', 'test']:
+            # when GPS / UTM is available
+            if self.mode in ['train', 'val', 'test']:
+
+                # load query / database data
+                qData = pd.read_csv(join(root_dir, subdir, city, 'query', 'postprocessed.csv'), index_col = 0)
+                dbData = pd.read_csv(join(root_dir, subdir, city, 'database', 'postprocessed.csv'), index_col = 0)
+                
+                # filter based on panorama data
+                if self.exclude_panos:
 
                     # load query / database data
-                    qData = pd.read_csv(join(root_dir, subdir, city, 'query', 'postprocessed.csv'), index_col = 0)
-                    dbData = pd.read_csv(join(root_dir, subdir, city, 'database', 'postprocessed.csv'), index_col = 0)
+                    qDataRaw = pd.read_csv(join(root_dir, subdir, city, 'query', 'raw.csv'), index_col = 0)
+                    dbDataRaw = pd.read_csv(join(root_dir, subdir, city, 'database', 'raw.csv'), index_col = 0)
                     
-                    # filter based on panorama data
-                    if self.exclude_panos:
+                    qData = qData.loc[(qDataRaw['pano'] == False).values, :]
+                    dbData = dbData.loc[(dbDataRaw['pano'] == False).values, :]
 
-                        # load query / database data
-                        qDataRaw = pd.read_csv(join(root_dir, subdir, city, 'query', 'raw.csv'), index_col = 0)
-                        dbDataRaw = pd.read_csv(join(root_dir, subdir, city, 'database', 'raw.csv'), index_col = 0)
-                        
-                        qData = qData.loc[(qDataRaw['pano'] == False).values, :]
-                        dbData = dbData.loc[(dbDataRaw['pano'] == False).values, :]
+                # append image keys with full path
+                self.qImages.extend([join(root_dir, subdir, city, 'query', 'images', key + '.jpg') for key in qData['key'].values]) 
+                self.dbImages.extend([join(root_dir, subdir, city, 'database', 'images', key + '.jpg') for key in dbData['key'].values])
 
-                    # append image keys with full path
-                    self.qImages.extend([join(root_dir, subdir, city, 'query', 'images', key + '.jpg') for key in qData['key'].values]) 
-                    self.dbImages.extend([join(root_dir, subdir, city, 'database', 'images', key + '.jpg') for key in dbData['key'].values])
+                # utm coordinates
+                utmQ = qData[['easting', 'northing']].values.reshape(-1,2)
+                utmDb = dbData[['easting', 'northing']].values.reshape(-1,2)
 
-                    # utm coordinates
-                    utmQ = qData[['easting', 'northing']].values.reshape(-1,2)
-                    utmDb = dbData[['easting', 'northing']].values.reshape(-1,2)
+                # find positive images for training
+                neigh = NearestNeighbors(algorithm = 'brute')
+                neigh.fit(utmDb)
+                _, pI = neigh.radius_neighbors(utmQ, self.posDistThr)
 
-                    # find positive images for training
-                    neigh = NearestNeighbors(algorithm = 'brute')
-                    neigh.fit(utmDb)
-                    _, pI = neigh.radius_neighbors(utmQ, self.posDistThr)
+                if mode == 'train':
+                    _, nI = neigh.radius_neighbors(utmQ, self.negDistThr)
 
-                    if mode == 'train':
-                        _, nI = neigh.radius_neighbors(utmQ, self.negDistThr)
-
-                    for qidx in range(len(qData)):
-                        
-                        # the query image has at least one positive
-                        if len(pI[qidx]) > 0:
-                            
-                            self.qidxs.append(qidx + _lenQ)
-                            self.pidxs.append([p + _lenDb for p in pI[qidx]])
-                            
-                            # in training we have two thresholds, one for finding positives and one for finding images that we are certain are negatives.
-                            if self.mode == 'train':
-
-                                self.clusters.append([n + _lenDb for n in nI[qidx]])
-                        
-                    self.utmQ = np.concatenate([self.utmQ, utmQ], axis=0) if hasattr(self, 'utmQ') else utmQ
-                    self.utmDb = np.concatenate([self.utmDb, utmDb], axis=0) if hasattr(self, 'utmDb') else utmDb
+                for qidx in range(len(qData)):
                     
-                # when GPS / UTM / pano info is not available    
-                elif self.mode in ['test2']:
-                    raise NotImplementedError
+                    # the query image has at least one positive
+                    if len(pI[qidx]) > 0:
+                        
+                        self.qidxs.append(qidx + _lenQ)
+                        self.pidxs.append([p + _lenDb for p in pI[qidx]])
+                        
+                        # in training we have two thresholds, one for finding positives and one for finding images that we are certain are negatives.
+                        if self.mode == 'train':
+
+                            self.clusters.append([n + _lenDb for n in nI[qidx]])
+                    
+                self.utmQ = np.concatenate([self.utmQ, utmQ], axis=0) if hasattr(self, 'utmQ') else utmQ
+                self.utmDb = np.concatenate([self.utmDb, utmDb], axis=0) if hasattr(self, 'utmDb') else utmDb
+                
+            # when GPS / UTM / pano info is not available    
+            elif self.mode in ['test2']:
+                raise NotImplementedError
 
             # if a combination of cities, task and subtask is chosen, where there are no query/database images, then exit
             if len(self.dbImages) == 0:

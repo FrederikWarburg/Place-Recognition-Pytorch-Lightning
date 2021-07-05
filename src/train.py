@@ -15,8 +15,8 @@ from lightning.pl_lifelongalignment import PL_LifeLongAlignment
 from utils.profiler import build_profiler
 from utils.evaluate import MeanAveragePrecision
 
-training_dataset_names = ['msls']
-test_datasets_names = ['msls']
+training_dataset_names = ['msls', 'aerialstreet']
+test_datasets_names = ['msls', 'aerialstreet']
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -127,7 +127,6 @@ if __name__ == '__main__':
     # lightning module
     profiler = 'simple'
     metric = MeanAveragePrecision(args.negDistThr)
-    local_metric = MeanAveragePrecision(args.negDistThr)
     
     if os.path.isfile(args.resume):
         print("Load from checkount {}".format(args.resume))

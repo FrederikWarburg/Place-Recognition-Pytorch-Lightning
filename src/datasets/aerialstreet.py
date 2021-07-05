@@ -26,14 +26,15 @@ class BaseDataset(data.Dataset):
 
         # flags
         self.name = name
-        self.mode = mode
+        self.mode = 'test' if mode in ('test', 'val') else 'train'
 
         # other
         self.transform = transform
 
         # load query / database data
         #TODO: rename on disk
-        qData = pd.read_csv(join(root_dir, 'query', 'data.csv'), delimiter=";")
+        qData = pd.read_csv(join(root_dir, mode, 'query', 'data.csv'), index_col=0)
+        
         # remove offset
         qData['easting'] = qData['X1'] - 690000
         qData['northing'] = qData['Y1'] - 6170000
@@ -41,11 +42,11 @@ class BaseDataset(data.Dataset):
         qData['key'] = qData['Image filename']
 
         #TODO: include filenames
-        dbData = pd.read_csv(join(root_dir, 'database', 'data.csv'), index_col=0)
+        dbData = pd.read_csv(join(root_dir, mode, 'database', 'data.csv'), index_col=0)
         
         # append image keys with full path
-        self.qImages = np.asarray([join(root_dir, 'query', 'images', key) for key in qData['key'].values])
-        self.dbImages = np.asarray([join(root_dir, 'database', 'images', key) for key in dbData['key'].values])
+        self.qImages = np.asarray([join(root_dir, mode, 'query', 'images', key) for key in qData['key'].values])
+        self.dbImages = np.asarray([join(root_dir, mode, 'database', 'images', key) for key in dbData['key'].values])
 
         # utm coordinates
         self.utmQ = qData[['easting', 'northing']].values.reshape(-1,2)
