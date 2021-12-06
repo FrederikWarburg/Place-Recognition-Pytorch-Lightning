@@ -42,10 +42,6 @@ def parse_args():
                         help='training dataset: ' + 
                             ' | '.join(training_dataset_names) +
                             ' (default: msls)')
-    parser.add_argument('--test-datasets', '-td', metavar='DATASETS', default='msls', choices=test_datasets_names,
-                        help='comma separated list of test datasets: ' + 
-                            ' | '.join(test_datasets_names) + 
-                            ' (default: msls)')
     parser.add_argument('--test-freq', default=20, type=int, metavar='N', 
                         help='run test evaluation every N epochs (default: 1)')
 

@@ -1,7 +1,75 @@
 import torch
 
-#from pytorch_metric_learning.utils import loss_and_miner_utils as lmu
-from pytorch_metric_learning.miners.base_miner import BaseTupleMiner
+# from pytorch_metric_learning.utils import loss_and_miner_utils as lmu
+# from pytorch_metric_learning.miners.base_miner import BaseTupleMiner
+
+from pytorch_metric_learning.utils import common_functions as c_f
+from pytorch_metric_learning.utils.module_with_records_and_reducer import ModuleWithRecordsAndDistance
+
+
+class BaseMiner(ModuleWithRecordsAndDistance):
+    def mine(self, embeddings, labels, ref_emb, ref_labels):
+        raise NotImplementedError
+
+    def output_assertion(self, output):
+        raise NotImplementedError
+
+    def forward(self, embeddings, labels, ref_emb=None, ref_labels=None):
+        """
+        Args:
+            embeddings: tensor of size (batch_size, embedding_size)
+            labels: tensor of size (batch_size)
+        Does any necessary preprocessing, then does mining, and then checks the
+        shape of the mining output before returning it
+        """
+        self.reset_stats()
+        with torch.no_grad():
+            # c_f.check_shapes(embeddings, labels)
+            labels = c_f.to_device(labels, embeddings)
+            ref_emb, ref_labels = self.set_ref_emb(
+                embeddings, labels, ref_emb, ref_labels
+            )
+            mining_output = self.mine(embeddings, labels, ref_emb, ref_labels)
+        self.output_assertion(mining_output)
+        return mining_output
+
+    def set_ref_emb(self, embeddings, labels, ref_emb, ref_labels):
+        if ref_emb is not None:
+            ref_labels = c_f.to_device(ref_labels, ref_emb)
+        else:
+            ref_emb, ref_labels = embeddings, labels
+        # c_f.check_shapes(ref_emb, ref_labels)
+        return ref_emb, ref_labels
+
+
+class BaseTupleMiner(BaseMiner):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_to_recordable_attributes(
+            list_of_names=["num_pos_pairs", "num_neg_pairs", "num_triplets"],
+            is_stat=True,
+        )
+
+    def output_assertion(self, output):
+        """
+        Args:
+            output: the output of self.mine
+        This asserts that the mining function is outputting
+        properly formatted indices. The default is to require a tuple representing
+        a,p,n indices or a1,p,a2,n indices within a batch of embeddings.
+        For example, a tuple of (anchors, positives, negatives) will be
+        (torch.tensor, torch.tensor, torch.tensor)
+        """
+        if len(output) == 3:
+            self.num_triplets = len(output[0])
+            assert self.num_triplets == len(output[1]) == len(output[2])
+        elif len(output) == 4:
+            self.num_pos_pairs = len(output[0])
+            self.num_neg_pairs = len(output[2])
+            assert self.num_pos_pairs == len(output[1])
+            assert self.num_neg_pairs == len(output[3])
+        else:
+            raise BaseException
 
 
 class TripletMarginMiner(BaseTupleMiner):
@@ -73,7 +141,6 @@ class TripletMarginMiner(BaseTupleMiner):
                 self.avg_triplet_margin = torch.mean(triplet_margin).item()
 
 
-
 def get_all_pairs_indices(labels, ref_labels=None, posDistThr = 10, negDistThr = 25):
     """
     Given a tensor of labels, this will return 4 tensors.
@@ -96,6 +163,7 @@ def get_all_pairs_indices(labels, ref_labels=None, posDistThr = 10, negDistThr =
     a2_idx, n_idx = torch.where(diffs)
 
     return a1_idx, p_idx, a2_idx, n_idx
+
 
 def get_all_triplets_indices(labels, ref_labels=None, posDistThr = 10, negDistThr = 25):
 

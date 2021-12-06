@@ -11,7 +11,7 @@ CUDA_VISIBLE_DEVICES=0 python train.py --directory '.' --data_dir /scratch/frwa/
 ### Train on Aerial-Street 
 
 ```
-CUDA_VISIBLE_DEVICES=0 python train.py --directory '.' --data_dir /scratch/frwa/aerial_street_dataset/ --training-dataset aerialstreet --workers 8 --batch_size 16 --arch resnet50
+CUDA_VISIBLE_DEVICES=0 python train.py --directory '.' --data_dir /work3/frwa/air-ground-project/data/ --training-dataset aerialstreet --workers 8 --batch_size 16 --arch resnet152
 ```
 
 ## Validation on MSLS

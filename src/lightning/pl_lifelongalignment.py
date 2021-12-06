@@ -64,9 +64,9 @@ class PL_LifeLongAlignment(pl.LightningModule):
         y = torch.stack(y).view(b*n, 2)
         
         output = self(x)
-
+        
         indices_tuple = self.get_indices_tuple(output["global_embed"], y)
-
+        
         loss = self.compute_loss(output, y, indices_tuple)
 
         # add images to tensorboard every epoch
@@ -130,7 +130,7 @@ class PL_LifeLongAlignment(pl.LightningModule):
         else:
             ref_emb = None
             ref_labels = None
-
+        
         indices_tuple = self.miner(embeddings, labels, ref_emb, ref_labels)
 
         self.log("tuple_stats/an_dist", self.miner.neg_pair_dist)
@@ -140,8 +140,12 @@ class PL_LifeLongAlignment(pl.LightningModule):
         return indices_tuple
 
     def compute_loss(self, output, y, indices_tuple):
-            
-        global_retrieval_loss = self.global_retrieval_criterion(output["global_embed"], y, indices_tuple)
+        
+        # this a hack: pytorch-metric-learning does not use the labels if indices_tuple is provided,
+        # however, the shape of the labels are required to be 1D.
+        place_holder = torch.zeros(y.size(0), device=y.device)
+
+        global_retrieval_loss = self.global_retrieval_criterion(output["global_embed"], place_holder, indices_tuple)
         self.log('train_global_retrieval_loss', global_retrieval_loss, on_step=True, on_epoch=True)
 
         return global_retrieval_loss

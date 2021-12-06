@@ -1,17 +1,30 @@
+import os
+
 import pandas as pd
-from os.path import join
 import numpy as np
 import torch.utils.data as data
-import sys
+
 from sklearn.neighbors import NearestNeighbors
 
-from datasets.datahelpers import default_loader, imresize
+from datasets.datahelpers import default_loader, imresize, angle_diff
 
 class BaseDataset(data.Dataset):
  
 
-    def __init__(self, name, mode='train', imsize=None, transform=None, loader=default_loader, posDistThr=10, negDistThr=25, root_dir = 'data'):
-                        
+    def __init__(self,
+            name, 
+            mode='train', 
+            envs=["nordhavn"], #,"lolland", "skagen","motorring_3"], 
+            imsize=None, 
+            transform=None, 
+            loader=default_loader, 
+            posDistThr=10, 
+            negDistThr=25, 
+            root_dir = 'data',
+        ):
+        
+        self.dbImages = []
+        self.qImages = []
         self.qidxs = [] 
         self.pidxs = []  
         self.clusters = [] 
@@ -25,56 +38,72 @@ class BaseDataset(data.Dataset):
         self.loader = loader
 
         # flags
+        self.envs = envs
         self.name = name
-        self.mode = 'test' if mode in ('test', 'val') else 'train'
+        #TODO: create train and test set
+        self.mode = "" #'test' if mode in ('test', 'val') else 'train'
 
         # other
         self.transform = transform
 
         # load query / database data
-        #TODO: rename on disk
-        qData = pd.read_csv(join(root_dir, self.mode, 'query', 'data.csv'), index_col=0)
+        for env in self.envs:
+            env_path = f"{root_dir}/{env}"
+            for seq in os.listdir(f"{env_path}/street_images_perspective"):
+                print(f"==> env : {env} {seq}")
+                #TODO: something funcky is going on when we also iterate over both model and seq. I think things are added model times...
+                # get len of images from cities so far for indexing
+                _lenQ = len(self.qImages)
+                _lenDb = len(self.dbImages)
+
+                # load query data
+                q_path = f"{env_path}/street_images_perspective/{seq}"
+                qData = pd.read_csv(f"{q_path}/reference_perspective.csv")
+
+                # append image keys with full path
+                self.qImages.extend([f"{q_path}/images/{k}.jpg" for k in qData["perspective_filename"].values])
+                utmQ = qData[["UTM Easting", "UTM Northing"]].values.reshape(-1,2)
+                casQ = qData["perspective_heading[deg]"].values
+
+                # load database data
+                db_path = f"{env_path}/synthetized_view"
+                utmDb, casDb = [], []
+                for model in os.listdir(db_path):
+                    dbData = pd.read_csv(f"{db_path}/{model}/{seq}/reference.csv")
         
-        # remove offset
-        qData['easting'] = qData['X1'] - 690000
-        qData['northing'] = qData['Y1'] - 6170000
-        qData['altitude'] = qData['Z1'] - 0
-        qData['key'] = qData['Image filename']
+                    # append image keys with full path
+                    self.dbImages.extend([f"{db_path}/{model}/{seq}/images/{k}" for k in dbData["rgb"].values])
+                    utmDb = np.concatenate([utmDb, dbData[["easting", "northing"]].values.reshape(-1,2)], axis=0) if len(utmDb) > 0 else dbData[["easting", "northing"]].values.reshape(-1,2)
+                    casDb = np.concatenate([casDb, dbData["angle"].values], axis=0)  if len(casDb) > 0 else dbData["angle"].values
 
-        #TODO: include filenames
-        dbData = pd.read_csv(join(root_dir, self.mode, 'database', 'data.csv'), index_col=0)
-        
-        # append image keys with full path
-        self.qImages = np.asarray([join(root_dir, self.mode, 'query', 'images', key) for key in qData['key'].values])
-        self.dbImages = np.asarray([join(root_dir, self.mode, 'database', 'images', key) for key in dbData['key'].values])
+                # find positive images for training
+                neigh = NearestNeighbors(algorithm = 'brute')
+                neigh.fit(utmDb)
+                _, pI = neigh.radius_neighbors(utmQ, self.posDistThr)
 
-        # utm coordinates
-        self.utmQ = qData[['easting', 'northing']].values.reshape(-1,2)
-        self.utmDb = dbData[['easting', 'northing']].values.reshape(-1,2)
-
-        # find positive images for training
-        neigh = NearestNeighbors(algorithm = 'brute')
-        neigh.fit(self.utmDb)
-        _, pI = neigh.radius_neighbors(self.utmQ, self.posDistThr)
-
-        if self.mode == 'train':
-            _, nI = neigh.radius_neighbors(self.utmQ, self.negDistThr)
-
-        for qidx in range(len(qData)):
-            
-            # the query image has at least one positive
-            if len(pI[qidx]) > 0:
-                
-                self.qidxs.append(qidx)
-
-                #TODO: include cas threshold
-                self.pidxs.append([p for p in pI[qidx]])
-                
-                # in training we have two thresholds, one for finding positives and one for finding images that we are certain are negatives.
                 if self.mode == 'train':
-                    self.clusters.append([n for n in nI[qidx]])
-            
+                    _, nI = neigh.radius_neighbors(utmQ, self.negDistThr)
+
+                for qidx in range(len(qData)):
+                    
+                    # the query image has at least one positive
+                    if len(pI[qidx]) > 0:
+                        
+                        self.qidxs.append(qidx + _lenQ)
+                        self.pidxs.append([p + _lenDb for p in pI[qidx] if abs(angle_diff(casQ[qidx], casDb[p])) < 22.5])
+                        
+                        # in training we have two thresholds, one for finding positives and one for finding images that we are certain are negatives.
+                        if self.mode == 'train':
+                            self.clusters.append([n + _lenDb for n in nI[qidx]])
+                    
+                self.utmDb = np.concatenate([self.utmDb, utmDb], axis=0) if hasattr(self, 'utmDb') else utmDb
+                self.casDb = np.concatenate([self.casDb, casDb], axis=0) if hasattr(self, 'casDb') else casDb                
+                self.utmQ = np.concatenate([self.utmQ, utmQ], axis=0) if hasattr(self, 'utmQ') else utmQ
+                self.casQ = np.concatenate([self.casQ, casQ], axis=0) if hasattr(self, 'casQ') else casQ
+
         # cast to np.arrays for indexing during training
+        self.qImages = np.asarray(self.qImages)
+        self.dbImages = np.asarray(self.dbImages)
         self.qidxs = np.asarray(self.qidxs)
         self.pidxs = np.asarray(self.pidxs, dtype=object)
         self.clusters = np.asarray(self.clusters, dtype=object)
@@ -97,8 +126,19 @@ class BaseDataset(data.Dataset):
 
 class TrainDataset(BaseDataset):
 
-    def __init__(self, name, mode, imsize=None, transform=None, loader=default_loader, posDistThr=10, negDistThr=25, root_dir = 'data'):
-        super().__init__(name, mode, imsize, transform, loader, posDistThr, negDistThr, root_dir)
+    def __init__(
+            self, 
+            name, 
+            mode, 
+            envs=["nordhavn","lolland", "skagen","motorring_3"], 
+            imsize=None, 
+            transform=None, 
+            loader=default_loader, 
+            posDistThr=10, 
+            negDistThr=25, 
+            root_dir = 'data',
+        ):
+        super().__init__(name, mode, envs, imsize, transform, loader, posDistThr, negDistThr, root_dir)
 
     def __len__(self):
 
@@ -132,8 +172,19 @@ class TrainDataset(BaseDataset):
 
 class TestDataset(BaseDataset):
 
-    def __init__(self, name, mode, imsize=None, transform=None, loader=default_loader, posDistThr=10, negDistThr=25, root_dir = 'data'):
-        super().__init__(name, mode, imsize, transform, loader, posDistThr, negDistThr, root_dir)
+    def __init__(
+            self,
+            name, 
+            mode, 
+            envs=["nordhavn","lolland", "skagen","motorring_3"], 
+            imsize=None, 
+            transform=None, 
+            loader=default_loader, 
+            posDistThr=10, 
+            negDistThr=25, 
+            root_dir = 'data',
+        ):
+        super().__init__(name, mode, envs, imsize, transform, loader, posDistThr, negDistThr, root_dir)
 
     def __len__(self):
         # the dataset is the queries followed by the database images

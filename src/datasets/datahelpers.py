@@ -5,6 +5,10 @@ import numpy as np
 import torch
 
 
+def angle_diff(a, b):
+    # https://stackoverflow.com/questions/1878907/how-can-i-find-the-difference-between-two-angles
+    return (a - b + 180) % 360 - 180
+
 def cid2filename(cid, prefix):
     """
     Creates a training image path out of its CID name
