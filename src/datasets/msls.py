@@ -126,15 +126,12 @@ class BaseDataset(data.Dataset):
                 print("Try choosing a different subtask or more cities")
                 sys.exit()
 
-            # cast to np.arrays for indexing during training
-            self.dbImages = np.asarray(self.dbImages)
-            self.qImages = np.asarray(self.qImages)
-            self.qidxs = np.asarray(self.qidxs)
-            self.pidxs = np.asarray(self.pidxs, dtype=object)
-            self.clusters = np.asarray(self.clusters, dtype=object)
-
-        else:
-            raise(RuntimeError("Unknown dataset name!"))
+        # cast to np.arrays for indexing during training
+        self.dbImages = np.asarray(self.dbImages)
+        self.qImages = np.asarray(self.qImages)
+        self.qidxs = np.asarray(self.qidxs)
+        self.pidxs = np.asarray(self.pidxs, dtype=object)
+        self.clusters = np.asarray(self.clusters, dtype=object)
 
     def __len__(self):
         raise NotImplementedError

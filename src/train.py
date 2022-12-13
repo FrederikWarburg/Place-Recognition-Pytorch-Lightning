@@ -160,13 +160,13 @@ if __name__ == '__main__':
     
     # freeze model paramters
     trainer = pl.Trainer.from_argparse_args(args, 
-                                accelerator='ddp',
+                                accelerator='cuda',
                                 accumulate_grad_batches=args.update_every,
                                 precision=16,
                                 max_epochs=args.epochs,
-                                gpus=torch.cuda.device_count(),
+                                #gpus=torch.cuda.device_count(),
                                 check_val_every_n_epoch=1,
-                                progress_bar_refresh_rate=20,
+                                #progress_bar_refresh_rate=20,
                                 logger=logger, 
                                 #plugins=DDPPlugin(find_unused_parameters=False),
                                 callbacks=callbacks,

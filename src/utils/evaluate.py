@@ -228,6 +228,13 @@ class MeanAveragePrecision(Metric):
 
     def rank(self):
 
+        self.q_embed = torch.cat(self.q_embed)
+        self.db_embed = torch.cat(self.db_embed)
+        self.utmQ = torch.cat(self.utmQ)
+        self.utmDb = torch.cat(self.utmDb)
+        self.q_index = torch.cat(self.q_index)
+        self.db_index = torch.cat(self.db_index)
+
         q_embed = self.q_embed.view(-1, self.q_embed.shape[-1]).cpu().numpy()
         db_embed = self.db_embed.view(-1, self.db_embed.shape[-1]).cpu().numpy()
         utmQ = self.utmQ.view(-1, 2).cpu().numpy()
